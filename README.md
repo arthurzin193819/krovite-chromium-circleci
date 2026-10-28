@@ -1,26 +1,26 @@
-# Krovite - tentativa de compilação Chromium Android ARM64 no CircleCI Free
+# Krovite — experimento Chromium Android no CircleCI Free
 
-Este repositório contém uma pipeline que realmente tenta executar a compilação oficial
-`autoninja -j 2 -C out/Krovite chrome_public_apk`.
+O projeto tenta compilar `chrome_public_apk` para Android ARM64 no CircleCI. Nenhum APK foi produzido ou testado ainda.
 
-## Usar pelo celular
-1. No navegador Android, abra https://app.circleci.com/ e entre usando seu GitHub.
-2. Escolha a organização e configure o projeto público `krovite-chromium-build` no plano Free.
-   Se usou outro nome, selecione esse nome.
-3. Habilite a pipeline; ela é iniciada por alterações na branch `main` (ou clique em Trigger Pipeline).
-4. Acompanhe os jobs `fetch_source`, `configure_source`, `compile_01` ... .
-5. Se aparecer `ChromiumAndroid-arm64.apk` nos artifacts de algum job, baixe-o no celular.
+## Por que a pipeline foi corrigida
 
-## Limites reais
-- CircleCI Free oferece Linux VM large com 4 vCPUs, ~15 GB RAM, 150 GB disco.
-- Cada job tem limite de 1 hora. A pipeline divide a compilação e usa caches grandes.
-- Cache de dezenas de gigabytes pode demorar demais ou ser rejeitado. Não há garantia de conclusão.
-- Créditos gratuitos e cotas de armazenamento podem ser consumidos e bloquear a pipeline.
-- O repo criado contém apenas os scripts de CI: o Chromium é obtido diretamente do upstream.
-- O resultado é Chromium original para Android, ainda **não** Krovite personalizado.
-- Nenhum APK está pronto antes de um job realmente concluir com sucesso.
+A configuração anterior continha 12 caches de `~/chromium`, com dezenas de GB cada. Isso poderia esgotar o armazenamento/créditos gratuitos. **Todos os caches, workspaces e 10 estágios foram removidos.** O CircleCI Free limita cada job a 1 hora, então dividir a compilação em jobs sem armazenar o checkout não preserva o progresso. Não existe, nesta configuração, compilação incremental entre jobs.
 
-Fontes:
-https://chromium.googlesource.com/chromium/src/+/main/docs/android_build_instructions.md
-https://circleci.com/docs/reference/configuration-reference/
-https://circleci.com/pricing/
+## Uso pelo celular
+
+1. Entre em https://app.circleci.com/ com sua conta GitHub e configure este repositório usando `.circleci/config.yml` da branch `main`.
+2. A primeira pipeline dispara somente `validate`: verifica a sintaxe Bash e o checkout do projeto; não baixa Chromium e não executa compilação.
+3. Se quiser **tentar compilar**, em CircleCI acesse *Trigger Pipeline* para este projeto e branch `main`, escolha *Add Parameters* e configure `build_chromium` (boolean) = `true`. Isso executa o job `compile_chromium`.
+4. Acompanhe os logs. Se o APK for produzido, ele será enviado para os Artifacts como `ChromiumAndroid-arm64.apk`.
+
+## Limitações documentadas
+
+- A máquina `large` usa Linux x86-64 com aproximadamente 4 vCPUs, 15 GB RAM e 150 GB de disco.
+- **Cada job Free dura no máximo 1 hora.** O trabalho de baixar, configurar e compilar o Chromium do zero provavelmente ultrapassa esse limite, especialmente com 4 vCPUs.
+- **Não há checkpoint entre execuções.** A configuração evita caches enormes, mas não resolve a necessidade de persistência para uma compilação longa.
+- A execução de compilação é intencionalmente manual (parâmetro falso por padrão) para não consumir créditos por cada push.
+- Nenhuma promessa de APK final ou de término dentro da cota gratuita.
+- Se o build falhar ou o limite terminar, seu job deve falhar: não existe PASS fictício nem APK falso.
+- O resultado, se compilado, será Chromium Android original; a personalização Krovite ainda não foi feita.
+
+Documentação: https://chromium.googlesource.com/chromium/src/+/HEAD/docs/android_build_instructions.md ; https://circleci.com/docs/reference/configuration-reference/ ; https://circleci.com/pricing/

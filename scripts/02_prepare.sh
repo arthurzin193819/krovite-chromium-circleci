@@ -3,8 +3,10 @@ set -Eeuo pipefail
 export DEBIAN_FRONTEND=noninteractive
 export PATH="$HOME/chromium/depot_tools:$PATH"
 cd "$HOME/chromium/src"
-[[ -d build && -f ../.gclient ]] || { echo 'ERRO: cache do checkout não restaurado'; exit 13; }
-sudo build/install-build-deps.sh --no-prompt
+[[ -d build && -f ../.gclient ]] || { echo 'ERRO: checkout Chromium inexistente ou incompleto'; exit 13; }
+# O script Android instala as dependências Linux e específicas do Android.
+bash build/install-build-deps-android.sh
+
 gclient runhooks
 mkdir -p out/Krovite
 cat > out/Krovite/args.gn <<'GN'
@@ -16,5 +18,5 @@ symbol_level = 0
 use_remoteexec = false
 GN
 gn gen out/Krovite
-printf '\nPré-configuração OK.\n'
+printf '\nConfiguração Android ARM64 concluída.\n'
 df -h "$HOME"

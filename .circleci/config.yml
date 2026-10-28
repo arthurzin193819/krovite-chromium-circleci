@@ -1,130 +1,60 @@
 version: 2.1
 
+# A compilação completa é opt-in: os eventos de GitHub só rodam validação barata.
+parameters:
+  build_chromium:
+    type: boolean
+    default: false
+
 jobs:
-  fetch_source:
-    machine:
-      image: ubuntu-2404:current
-    resource_class: large
+  validate:
+    docker:
+      - image: cimg/base:stable
+    resource_class: small
     steps:
       - checkout
       - run:
-          name: fetch_source (Chromium Android real)
-          command: bash scripts/01_fetch.sh
-          no_output_timeout: 45m
-      - save_cache:
-          key: krovite-chromium-v2-{{ .Revision }}-source
-          paths:
-            - ~/chromium
-  configure_source:
+          name: Validar scripts sem baixar Chromium
+          command: |
+            set -euo pipefail
+            bash -n scripts/01_fetch.sh scripts/02_prepare.sh scripts/03_build.sh
+            test -f .circleci/config.yml
+            echo 'Validação local dos scripts: OK'
+
+  compile_chromium:
     machine:
       image: ubuntu-2404:current
     resource_class: large
+    working_directory: ~/project
     steps:
       - checkout
-      - restore_cache:
-          keys:
-            - krovite-chromium-v2-{{ .Revision }}-source
       - run:
-          name: configure_source (Chromium Android real)
-          command: bash scripts/02_prepare.sh
-          no_output_timeout: 45m
-      - save_cache:
-          key: krovite-chromium-v2-{{ .Revision }}-prepared
-          paths:
-            - ~/chromium
-  compile:
-    parameters:
-      previous:
-        type: string
-      next:
-        type: string
-    machine:
-      image: ubuntu-2404:current
-    resource_class: large
-    steps:
-      - checkout
-      - restore_cache:
-          keys:
-            - krovite-chromium-v2-{{ .Revision }}-<< parameters.previous >>
-      - run:
-          name: Compile Chromium ARM64 (real)
-          command: bash scripts/03_build.sh
-          no_output_timeout: 45m
-      - save_cache:
-          key: krovite-chromium-v2-{{ .Revision }}-<< parameters.next >>
-          paths:
-            - ~/chromium
+          name: Chromium Android ARM64 — tentativa real em um único runner
+          command: |
+            set -euo pipefail
+            mkdir -p output
+            echo 'Sem cache/workspace de 100+ GB. Limite do plano Free: 1 hora por job.'
+            timeout --signal=TERM --kill-after=30s 55m \
+              bash -c 'set -euo pipefail; bash scripts/01_fetch.sh; bash scripts/02_prepare.sh; bash scripts/03_build.sh' \
+              || { code=$?; echo "Falha ou tempo esgotado (exit $code). Sem APK garantido." >&2; exit "$code"; }
+          no_output_timeout: 50m
       - store_artifacts:
           path: output
           destination: chromium-android
 
 workflows:
-  android_chromium:
+  safe_validation:
+    unless: << pipeline.parameters.build_chromium >>
     jobs:
-      - fetch_source:
+      - validate:
           filters:
             branches:
               only: main
-      - configure_source:
-          requires:
-            - fetch_source
-      - compile:
-          name: compile_01
-          previous: prepared
-          next: step01
-          requires:
-            - configure_source
-      - compile:
-          name: compile_02
-          previous: step01
-          next: step02
-          requires:
-            - compile_01
-      - compile:
-          name: compile_03
-          previous: step02
-          next: step03
-          requires:
-            - compile_02
-      - compile:
-          name: compile_04
-          previous: step03
-          next: step04
-          requires:
-            - compile_03
-      - compile:
-          name: compile_05
-          previous: step04
-          next: step05
-          requires:
-            - compile_04
-      - compile:
-          name: compile_06
-          previous: step05
-          next: step06
-          requires:
-            - compile_05
-      - compile:
-          name: compile_07
-          previous: step06
-          next: step07
-          requires:
-            - compile_06
-      - compile:
-          name: compile_08
-          previous: step07
-          next: step08
-          requires:
-            - compile_07
-      - compile:
-          name: compile_09
-          previous: step08
-          next: step09
-          requires:
-            - compile_08
-      - compile:
-          name: compile_10
-          previous: step09
-          next: step10
-          requires:
-            - compile_09
+
+  manual_chromium_build:
+    when: << pipeline.parameters.build_chromium >>
+    jobs:
+      - compile_chromium:
+          filters:
+            branches:
+              only: main
